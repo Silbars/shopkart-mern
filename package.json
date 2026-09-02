@@ -1,0 +1,10 @@
+{
+  "name": "shopkart-lab-projects",
+  "version": "1.0.0",
+  "description": "ShopKart Lab Projects Root",
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "dev": "npm --prefix backend run dev",
+    "test": "npm --prefix backend test"
+  }
+}
