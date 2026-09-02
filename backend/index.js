@@ -50,8 +50,22 @@ app.use((err, req, res, next) => {
 
 // Database Connection & Server Start (only if not running under Jest test runner)
 if (process.env.NODE_ENV !== 'test') {
+  let connectionUri = process.env.MONGO_URI;
+
+  // Support password-protected connection via separate variables if preferred
+  if (!connectionUri && process.env.DB_USER && process.env.DB_PASSWORD && process.env.DB_HOST) {
+    const encodedUser = encodeURIComponent(process.env.DB_USER);
+    const encodedPassword = encodeURIComponent(process.env.DB_PASSWORD);
+    const dbName = process.env.DB_NAME || 'shopkart';
+    connectionUri = `mongodb+srv://${encodedUser}:${encodedPassword}@${process.env.DB_HOST}/${dbName}?retryWrites=true&w=majority`;
+  }
+
+  const finalUri = connectionUri || 'mongodb://127.0.0.1:27017/shopkart';
+
   mongoose
-    .connect(MONGO_URI)
+    .connect(finalUri, {
+      serverSelectionTimeoutMS: 8000
+    })
     .then(() => {
       console.log('Successfully connected to MongoDB.');
       app.listen(PORT, () => {
@@ -60,6 +74,11 @@ if (process.env.NODE_ENV !== 'test') {
     })
     .catch((err) => {
       console.error('Database connection failed:', err.message);
+      if (err.message.includes('SSL alert') || err.message.includes('Could not connect to any servers')) {
+        console.error('\n⚠️  MongoDB Atlas Connection Tip:');
+        console.error('Atlas blocked the connection because the client IP is not whitelisted.');
+        console.error('Please visit MongoDB Atlas -> Security -> Network Access -> Add IP Address -> "Allow Access From Anywhere" (0.0.0.0/0).\n');
+      }
       process.exit(1);
     });
 }
