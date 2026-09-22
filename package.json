@@ -4,7 +4,13 @@
   "description": "ShopKart Lab Projects Root",
   "scripts": {
     "start": "npm --prefix backend start",
-    "dev": "npm --prefix backend run dev",
+    "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
     "test": "npm --prefix backend test"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }
