@@ -655,3 +655,386 @@ They're sent to `/login` with the message "Log in to save products to your wishl
 
 **Q: How did you test the backend before connecting React?**
 `backend/tests/wishlist.test.js` contains **27 Jest + Supertest tests** against an in-memory MongoDB, covering every row of the lab's edge-case table: add, duplicate (`409`), concurrent duplicates, invalid ID (`400`), missing product (`404`), get with populate, cross-user isolation, remove, not-in-wishlist (`404`), toggle, and `401` on every endpoint. Run them with `npm test` (56/56 passing including Labs 01–03).
+
+---
+---
+
+# 🛒 ShopKart — Fullstack Engineering Lab 05: TA Viva Preparation Guide
+## Shopping Cart (Global State + Derived Data + Persistent APIs)
+
+Answers to all 14 TA Viva Questions for **Engineering Lab 05**, based on the actual ShopKart code.
+
+---
+
+## Quick Reference Table
+
+| Q | Topic | One-line answer |
+|:---:|:---|:---|
+| 1 | Why global cart state | Navbar, Product Card, Product Details and Cart page all need the SAME cart |
+| 2 | Navbar should not fetch | Separate fetches = separate copies that drift apart |
+| 3 | Server vs frontend state | Server state = data owned by MongoDB; UI state = loading, errors, pending buttons |
+| 4 | Derived state | Values calculated from other state (`itemCount`, `subtotal`), never stored |
+| 5 | Subtotal not stored | It would go stale the moment a price or quantity changes |
+| 6 | Cart needs quantity | "Keyboard × 3" is one decision with a number; a wishlist is just yes/no |
+| 7 | Price not copied | Product is the source of truth; the cart always shows today's price |
+| 8 | Stock limit | Checked inside the MongoDB update itself (`$elemMatch` + `$lt`) |
+| 9 | Same product twice | Quantity goes up by 1; never a second row |
+| 10 | User from JWT | Signed by the server, cannot be forged; no `userId` from the client |
+| 11 | Count updates without refresh | Mutation response → `setCartItems` → every `useCart()` consumer re-renders |
+| 12 | One row's loading state | `pendingIds` Set in the context; each row asks `isPending(productId)` |
+| 13 | Mutation fails | State is untouched, error shown on that row, silent re-sync |
+| 14 | One shared state | One source of truth; impossible for Navbar and Cart page to disagree |
+
+---
+
+## 🗺️ The Whole Feature in 30 Seconds
+
+```text
+CardCartControl / BuyBox / CartItem
+        │  addToCart(id, qty) / updateQuantity(id, q) / removeFromCart(id)
+        ▼
+CartContext (src/context/CartContext.jsx)   ← ONE shared copy of the cart
+        │  marks id as pending → calls services/api.js
+        ▼
+Express → authMiddleware (JWT → req.user) → cart.controller.js
+        │  validates, enforces stock, updates MongoDB atomically
+        ▼
+Response: { success, message, cart: [ { product: {...populated}, quantity } ] }
+        │
+        ▼
+CartContext: setCartItems(response.cart)
+        │
+        ├─▶ Navbar "Cart (N)"      N = itemCount (derived)
+        ├─▶ Product Cards           stepper [ − 2 + ]
+        └─▶ Cart page + Summary     subtotal (derived)
+```
+
+| Method | Endpoint | Success | Failures |
+|---|---|:---:|---|
+| GET | `/cart` | 200 | 401 |
+| POST | `/cart/:productId` | 201 new row, 200 quantity +1 | 401, 400 invalid ID / out of stock / over stock, 404 product |
+| PATCH | `/cart/:productId` `{ quantity }` | 200 | 401, 400 invalid ID / bad quantity / over stock, 404 product, 404 not in cart |
+| DELETE | `/cart/:productId` | 200 | 401, 400 invalid ID, 404 not in cart |
+
+Every success returns the **full populated cart**, so the frontend never has to guess what the server did.
+
+---
+
+## 1. Why does cart state need to be shared globally?
+
+### Core Answer:
+Because **four different parts of the UI show the same cart at the same time**:
+
+| Component | What it needs from the cart |
+|---|---|
+| `Navbar.jsx` | Total units for "Cart (3)" |
+| `CardCartControl.jsx` (every Product Card) and `BuyBox.jsx` (Product Details) | The quantity in the stepper, "2 in your cart", how many more the Qty list may offer |
+| `Cart.jsx` + `CartItem.jsx` | Every row, quantities, line totals |
+| Order Summary (inside `Cart.jsx`) | Item count and subtotal |
+
+These components are not parent and child; they sit in different branches of the tree (Navbar is outside the routed pages). Passing the cart down as props would mean threading it through `App` and every page in between ("prop drilling"). **Context puts the cart above everything** (`main.jsx`: `AuthProvider > CartProvider > App`), and any component can read it with `useCart()`.
+
+> 💡 **Contrast with Lab 04:** the wishlist was deliberately kept out of Context. Each page fetched it when it needed it, because only one page at a time cared about the full list. The cart is different: it changes constantly and is visible everywhere at once.
+
+---
+
+## 2. Why should the Navbar not independently fetch the cart?
+
+### Core Answer:
+Two fetches create **two copies**, and two copies drift apart.
+
+```text
+❌ Navbar fetches GET /cart        → shows Cart (2)
+   Cart page fetches GET /cart     → user presses +, page shows 3 items
+   Navbar still shows Cart (2)     ← nobody told it
+```
+
+1. **Inconsistency:** this is exactly the "Navbar says 2, Cart page shows 3" bug the lab warns about.
+2. **Wasted requests:** the same data fetched on every page.
+3. **Who updates whom?** Every component would need to know about every other one.
+
+### What ShopKart does:
+`CartContext` fetches **once**, when the customer logs in (`useEffect` on `isAuthenticated`). The Navbar just reads `itemCount` from `useCart()`.
+
+> 🧪 **Verified in the browser:** opening the Cart page from the Navbar made **0** extra `GET /cart` requests. The page reads the shared state.
+
+---
+
+## 3. What is the difference between server state and frontend state?
+
+### Core Answer:
+
+| | Server state | Frontend (UI) state |
+|:---|:---|:---|
+| **Owned by** | MongoDB (the backend) | The browser tab |
+| **Survives refresh?** | ✅ Yes | ❌ No |
+| **Shared with other devices?** | ✅ Yes | ❌ No |
+| **ShopKart examples** | `cartItems` (products + quantities) | `status` (`loading` / `ready` / `error`), `error`, `pendingIds` (which buttons are busy), per-row error messages |
+
+### The rule we follow:
+**The frontend never invents server state.** `cartItems` only ever changes by being replaced with a response from the server:
+```js
+const data = await request();      // POST / PATCH / DELETE
+setCartItems(data.cart || []);     // exactly what MongoDB now has
+```
+We don't do `quantity + 1` locally and hope the server agrees. If the server says no (stock), the UI shows what the server has.
+
+---
+
+## 4. What is derived state?
+
+### Core Answer:
+**A value calculated from other state instead of being stored itself.** If you can compute it, don't store it.
+
+```js
+// src/context/CartContext.jsx
+const itemCount = useMemo(
+  () => cartItems.reduce((total, item) => total + item.quantity, 0),
+  [cartItems]
+);
+
+const subtotal = useMemo(
+  () => cartItems.reduce((total, item) => total + item.product.price * item.quantity, 0),
+  [cartItems]
+);
+```
+
+- `itemCount` and `subtotal` are **recalculated automatically** every time `cartItems` changes.
+- `useMemo` just avoids recalculating on unrelated re-renders.
+- The line total on each row (`price * quantity` in `CartItem.jsx`) is derived the same way.
+
+### Example (from the lab sheet, verified in the browser):
+```text
+Keyboard  ₹2,999 × 2 = ₹5,998
+Mouse     ₹1,499 × 1 = ₹1,499
+Subtotal               ₹7,497     Cart (3)   ← total UNITS, not rows
+```
+
+---
+
+## 5. Why should subtotal not be stored separately?
+
+### Core Answer:
+Because a stored subtotal **becomes wrong** as soon as anything it depends on changes, and something always changes.
+
+| Event | Stored subtotal | Derived subtotal |
+|:---|:---|:---|
+| Admin changes Keyboard price ₹2,999 → ₹2,499 | ❌ Still says old total | ✅ Correct on next load |
+| Customer presses + | ❌ Must remember to update it too | ✅ Recalculated automatically |
+| Product deleted from catalog | ❌ Includes a product that no longer exists | ✅ Row filtered out, total drops |
+
+Storing it would create **two sources of truth** (the items and the total) that must be kept in sync by hand. Deriving it means there is only one.
+
+> 🧪 **Proved by test:** `should show the latest product price (Product is the source of truth)`.
+
+---
+
+## 6. Why does the cart need quantity while the wishlist does not?
+
+### Core Answer:
+- A wishlist answers a **yes/no** question: *"Did I save this?"* Each product is in it or not, so an array of IDs is enough.
+- A cart answers *"What am I buying, and **how many**?"* "Keyboard × 3" is one row with a number, not three identical rows.
+
+```js
+// Lab 04 wishlist           // Lab 05 cart (backend/models/customer.model.js)
+wishlist: [ObjectId]         cart: [{
+                               product:  { type: ObjectId, ref: 'Product', required: true },
+                               quantity: { type: Number, default: 1, min: 1 }
+                             }]
+```
+
+- `min: 1` makes MongoDB/Mongoose reject a zero quantity. To get to zero, you **remove** the row. *(Test: `should reject a quantity below 1 at the schema level`.)*
+- `_id: false` on cart rows: the product reference already identifies the row, so there's no need for a second ID.
+
+---
+
+## 7. Why should product price not be copied into the cart object?
+
+### Core Answer:
+Same reason as Lab 04: **Product is the single source of truth.** The cart stores only `product` (an ObjectId) and `quantity`. Price, name, image and stock come from `populate()` on every read:
+
+```js
+Customer.findById(customerId)
+  .select('cart')
+  .populate({ path: 'cart.product', select: 'name price category image stock' });
+```
+
+1. **Prices change:** the customer sees today's price, not the price on the day they clicked Add.
+2. **Stock changes:** the stock rule must use today's stock (see Q8).
+3. **No duplication:** one price, stored once.
+
+> 💡 **When copying IS right:** Lab 06 orders. An order must **freeze** the price at checkout ("order snapshot"), because a receipt must not change when the product's price changes later. A cart is "what I plan to buy" (live); an order is "what I bought" (frozen).
+
+---
+
+## 8. How do you prevent quantity from exceeding stock?
+
+### Core Answer: at three levels, with the backend as the real guarantee.
+
+**1. Backend, adding (`POST /cart/:productId`): one atomic update**
+```js
+// +1 ONLY if this row's current quantity is still below stock
+await Customer.updateOne(
+  { _id: customerId,
+    cart: { $elemMatch: { product: productId, quantity: { $lt: product.stock } } } },
+  { $inc: { 'cart.$.quantity': 1 } }
+);
+```
+- `$elemMatch` makes both conditions (`product` matches AND `quantity < stock`) apply to **the same row**.
+- The check and the increment happen in **one database operation**, so two clicks at the same moment cannot both pass the check.
+- If nothing matched because the row is already at stock → **400** "Only N in stock".
+
+**2. Backend, setting quantity (`PATCH`):** `quantity > product.stock` → **400**, using the product's **current** stock from the database.
+
+**3. Frontend: avoid pointless requests**
+- `+` is disabled when `quantity >= stock` (card stepper and Cart page). On Product Details the **Qty** list only offers `stock − already in cart` (max 10), and says "All N available are in your cart" when nothing more can be added.
+- If stock **dropped** below what is already in the cart, the row shows "Only 1 left. Lower the quantity to continue.", `−` jumps straight to the available stock, and **Proceed to Checkout is disabled**.
+
+> 🧪 **Proved by test:** `should never exceed stock when the same product is added concurrently`: **5 simultaneous adds against stock 2** → exactly 2 succeed, 3 get `400`, one row with quantity 2.
+
+---
+
+## 9. What happens when the same product is added twice?
+
+### Core Answer: **quantity goes up by 1. A second row is never created.**
+
+```text
+POST /cart/:id   →  201  Keyboard × 1   (new row)
+POST /cart/:id   →  200  Keyboard × 2   (same row, $inc)
+```
+
+`addToCart` tries two atomic steps in order:
+1. **Increase** an existing row (`$elemMatch` + `$inc`, as in Q8).
+2. If there was no row, **insert** one, but only where `'cart.product': { $ne: productId }`, so a duplicate row is impossible even if two first-time adds race each other.
+
+> 🧪 **Proved by test:** `should increase quantity instead of adding a duplicate row`, checking the raw MongoDB document has exactly 1 row.
+
+---
+
+## 10. Why does the server identify the user from JWT?
+
+### Core Answer:
+The JWT is **signed with `JWT_SECRET`**, so the client cannot edit the `id` inside it without breaking the signature. `authMiddleware` verifies it and puts the customer on `req.user`. Every cart query uses **only** `req.user._id`:
+
+```js
+router.use(authMiddleware);                          // backend/routes/cart.routes.js
+Customer.updateOne({ _id: req.user._id, ... }, ...)  // backend/controllers/cart.controller.js
+```
+
+If the server accepted a `userId` from the request, anyone could change it and edit another customer's cart (IDOR).
+
+> 🧪 **Proved by tests:** `should ignore a userId sent in the request body`, `should only return the authenticated customer's cart`, and `401` on all four endpoints without a valid token.
+
+---
+
+## 11. How does the cart count update without refreshing the page?
+
+### Core Answer: React re-renders every component that reads the context when the context's state changes.
+
+```text
+Click "Add to Cart"
+  → addToCart(id) in CartContext
+  → POST /cart/:id  → server returns the full cart
+  → setCartItems(data.cart)                      ← state changes once
+  → itemCount re-derived (useMemo)
+  → React re-renders every useCart() consumer:
+       Navbar "Cart (3)", the Product Card's stepper [ − 2 + ], the Cart page
+```
+
+No `window.location.reload()`, no polling, no event bus. Changing the shared state is enough.
+
+---
+
+## 12. How do you update only one cart item's loading state?
+
+### Core Answer: a **Set of product IDs** that currently have a request running.
+
+```js
+// CartContext.jsx
+const [pendingIds, setPendingIds] = useState(() => new Set());
+const isPending = (productId) => pendingIds.has(productId);
+
+// runMutation: mark → request → unmark (in finally, so it always clears)
+setPending(productId, true);
+try { ... } finally { setPending(productId, false); }
+```
+
+```js
+// CartItem.jsx: only THIS row is affected
+const pending = isPending(_id);
+<button disabled={!canIncrease /* includes !pending */}>+</button>
+```
+
+- Pressing `+` on Keyboard disables **only the Keyboard row** and shows a small spinner in its quantity box. The Mouse row stays usable.
+- A single global `loading` boolean would freeze the whole cart for every click.
+- **Double-click protection:** `runMutation` also checks a `useRef` copy of the pending set (state can lag one render behind a very fast double click), so one product never has two requests in flight. *(Verified: a double-click sent exactly 1 request.)*
+
+---
+
+## 13. What happens if an API mutation fails?
+
+### Core Answer: **nothing changes, the user is told on that row, and the UI re-syncs.**
+
+```js
+try {
+  const data = await request();
+  setCartItems(data.cart);             // only on success
+} catch (err) {
+  if (err.status === 400 || err.status === 404) {
+    refreshCart({ silent: true });     // pick up the latest stock/price quietly
+  }
+  return { ok: false, message: ... };  // the row shows this message
+}
+```
+
+1. **State is untouched:** we never changed it optimistically, so there is nothing to roll back.
+2. **The error appears where the action happened:** "Only 1 in stock" under that row's controls, or under that product's Add to Cart button.
+3. **Silent re-sync:** a `400` usually means the page was showing old stock. A background `GET /cart` updates it, so the `+` button turns off by itself.
+4. **401:** "Your session has expired. Log in again to use your cart."
+
+> 🧪 **Verified in the browser:** the page showed stock 5, the database changed to 1, the customer pressed `+` → error "Only 1 in stock", quantity stayed 1, `+` became disabled automatically.
+
+**Loading the cart fails** (`GET /cart`): the Cart page shows "Unable to load your cart." with **Try Again**, which calls `refreshCart()`.
+
+---
+
+## 14. Why is one shared cart state better than separate local copies?
+
+### Core Answer: **one source of truth on the frontend, mirroring one source of truth on the backend.**
+
+| Separate copies (❌) | One shared `CartContext` (✅) |
+|:---|:---|
+| Navbar, Cart page and Product Cards each fetch and keep their own cart | Fetched once, read everywhere |
+| After a change, every copy must be updated manually | Change it once; React re-renders every reader |
+| Copies drift: "Cart (2)" vs 3 items on the page | Impossible to disagree: they read the same array |
+| Totals calculated in several places | `itemCount` / `subtotal` derived in one place |
+
+---
+
+## 🎯 Tricky Follow-Up Questions
+
+**Q: Why Context API and not Redux Toolkit?**
+The app already uses Context for auth (`AuthContext`), there's one cart with a handful of actions, and Context needs no extra packages. Redux Toolkit pays off with many slices, middleware or time-travel debugging, none of which this lab needs.
+
+**Q: Why does every mutation return the whole cart instead of just "ok"?**
+So the frontend can replace its state with exactly what MongoDB has, including the latest price and stock for every row. No client-side guessing, no drift.
+
+**Q: What if stock drops below the quantity already in the cart?**
+`GET /cart` still returns the row (we never silently change a customer's cart on read). The row is highlighted, `+` is disabled, `−` jumps to the available stock, and checkout is blocked until it's fixed. `PATCH` rejects anything above the current stock.
+
+**Q: What happens to a cart item whose product was deleted?**
+`populate()` returns `product: null` for it, and `loadPopulatedCart` filters it out, so it never shows as a broken row. `DELETE` still works for it because removal doesn't require the product to exist.
+
+**Q: Why `201` for the first add but `200` after that?**
+`201 Created` means a new cart row was created. Increasing the quantity of an existing row is an update, so `200 OK`.
+
+**Q: Why is quantity `"3"` (a string) rejected?**
+`PATCH` requires a real whole number: `typeof quantity === 'number' && Number.isInteger(quantity)`. Accepting strings or decimals (`1.5`) would let bad data into the cart.
+
+**Q: How did you test it?**
+`backend/tests/cart.test.js`: **36 Jest + Supertest tests** covering the whole Postman plan and the business-rules table (add, re-add, populate, update, over-stock, below 1, not in cart, remove, latest price, latest stock, deleted products, user isolation, persistence across login, concurrency, 401 on every endpoint). `npm test` → **92/92** with Labs 01–04.
+
+**Q: How does Add to Cart work now? (Amazon-style)**
+- **Product card:** `Add to cart` → after the first add it becomes a stepper `[🗑 1 +]`. At 1 the left button removes the item (back to `Add to cart`); above 1 it is `−`. `+` sends `POST /cart/:id` (+1); `−` sends `PATCH` with `quantity − 1`; the trash sends `DELETE`. Same CartContext, so the Navbar and Cart page update together.
+- **Product Details:** `Qty: [n]` + `Add to cart` sends **one** `POST /cart/:id` with `{ "quantity": n }`. The backend adds `n` atomically only if the new total stays within stock (`$elemMatch` with `quantity <= stock − n`, then `$inc` by `n`). Then an **"Added to cart" side panel** shows the item, the derived cart subtotal, and *Proceed to checkout* / *Go to Cart*.
+- The optional `quantity` defaults to 1, so the original Lab 05 contract ("add again = +1") is unchanged. *(Tests: `POST /cart/:productId with an optional quantity`, 9 cases incl. concurrency.)*

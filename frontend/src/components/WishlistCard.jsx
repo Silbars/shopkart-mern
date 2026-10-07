@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Tag, Heart, AlertCircle } from 'lucide-react';
+import { Heart, AlertCircle } from 'lucide-react';
 import StockBadge from './StockBadge';
 import { removeFromWishlist } from '../services/api';
 
@@ -50,16 +50,13 @@ const WishlistCard = ({ product, onRemoved }) => {
             e.currentTarget.src = FALLBACK_IMAGE;
           }}
         />
-        <div className="product-category-badge" title={`Category: ${category}`}>
-          <Tag size={12} />
-          <span>{category}</span>
-        </div>
       </div>
 
       <div className="product-card-body">
         <h3 className="product-card-title" title={name}>
           {name}
         </h3>
+        <p className="product-card-category">{category}</p>
 
         <div className="product-stock-container">
           <StockBadge stock={stock} id={`wishlist-stock-${_id}`} />
@@ -80,7 +77,6 @@ const WishlistCard = ({ product, onRemoved }) => {
             aria-label={`View details for ${name}`}
           >
             <span>View Details</span>
-            <ArrowRight size={15} />
           </Link>
         </div>
 

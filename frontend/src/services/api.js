@@ -185,4 +185,51 @@ export const toggleWishlist = async (productId) => {
   return response.data;
 };
 
+/* ==========================================================================
+   Cart APIs (Lab 05 - Persistent cart, shared through CartContext)
+   Every call returns { success, message, cart } where cart is the full,
+   populated cart from the server.
+   ========================================================================== */
+
+/**
+ * Task 3: Get the logged-in customer's cart
+ * GET /cart
+ */
+export const getCart = async () => {
+  const response = await api.get('/cart');
+  return response.data;
+};
+
+/**
+ * Task 2: Add a product to the cart (or add to its quantity if it is already there)
+ * POST /cart/:productId   body: { quantity }  (defaults to 1)
+ * @param {string} productId - MongoDB ObjectId of product
+ * @param {number} [quantity=1] - how many units to add
+ */
+export const addToCart = async (productId, quantity = 1) => {
+  const response = await api.post(`/cart/${productId}`, { quantity });
+  return response.data;
+};
+
+/**
+ * Task 4: Set the quantity of a product already in the cart
+ * PATCH /cart/:productId   body: { quantity }
+ * @param {string} productId - MongoDB ObjectId of product
+ * @param {number} quantity - new quantity (1 to stock)
+ */
+export const updateCartQuantity = async (productId, quantity) => {
+  const response = await api.patch(`/cart/${productId}`, { quantity });
+  return response.data;
+};
+
+/**
+ * Task 5: Remove a product from the cart
+ * DELETE /cart/:productId
+ * @param {string} productId - MongoDB ObjectId of product
+ */
+export const removeFromCart = async (productId) => {
+  const response = await api.delete(`/cart/${productId}`);
+  return response.data;
+};
+
 export default api;

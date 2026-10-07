@@ -33,6 +33,17 @@ export default defineConfig({
             return '/index.html';
           }
         }
+      },
+      // Lab 05: /cart is both a React page and an API path (same rule as /wishlist)
+      '/cart': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+        secure: false,
+        bypass: (req) => {
+          if (req.headers.accept && req.headers.accept.includes('text/html')) {
+            return '/index.html';
+          }
+        }
       }
     }
   }

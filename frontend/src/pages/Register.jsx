@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Phone, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { User, Mail, Lock, Phone, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { registerCustomer } from '../services/api';
 
 const Register = () => {
@@ -111,11 +111,8 @@ const Register = () => {
     <div className="auth-page-wrapper">
       <div className="auth-card">
         <div className="auth-header">
-          <div className="auth-badge">
-            <span>Customer Onboarding</span>
-          </div>
           <h1 className="auth-title">Create your account</h1>
-          <p className="auth-subtitle">Join ShopKart for exclusive deals and express checkout</p>
+          <p className="auth-subtitle">Save products to your wishlist and keep your cart on any device.</p>
         </div>
 
         {/* Server Error Alert Banner */}
@@ -136,7 +133,7 @@ const Register = () => {
                 name="fullName"
                 type="text"
                 className={`form-input ${errors.fullName ? 'has-error' : ''}`}
-                placeholder="e.g. Alex Mercer"
+                placeholder="e.g. Priya Sharma"
                 value={formData.fullName}
                 onChange={handleChange}
                 autoComplete="name"
@@ -163,7 +160,7 @@ const Register = () => {
                 name="email"
                 type="email"
                 className={`form-input ${errors.email ? 'has-error' : ''}`}
-                placeholder="alex.mercer@example.com"
+                placeholder="priya@example.com"
                 value={formData.email}
                 onChange={handleChange}
                 autoComplete="email"
@@ -254,12 +251,11 @@ const Register = () => {
             {isSubmitting ? (
               <>
                 <span className="spinner-sm"></span>
-                <span>Creating Account...</span>
+                <span>Creating account...</span>
               </>
             ) : (
               <>
-                <span>Create Account</span>
-                <ArrowRight size={18} />
+                <span>Create account</span>
               </>
             )}
           </button>

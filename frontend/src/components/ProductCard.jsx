@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Tag } from 'lucide-react';
+
 import StockBadge from './StockBadge';
 import WishlistButton from './WishlistButton';
+import CardCartControl from './CardCartControl';
 
 /**
  * Task 6: Product Card Component
@@ -26,10 +27,6 @@ const ProductCard = ({ product, isSaved = false, onWishlistChange }) => {
             e.currentTarget.src = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&auto=format&fit=crop&q=80';
           }}
         />
-        <div className="product-category-badge" title={`Category: ${category}`}>
-          <Tag size={12} />
-          <span>{category}</span>
-        </div>
       </div>
 
       {/* Card Content Area */}
@@ -37,6 +34,7 @@ const ProductCard = ({ product, isSaved = false, onWishlistChange }) => {
         <h3 className="product-card-title" title={name} id={`product-title-${_id}`}>
           {name}
         </h3>
+        <p className="product-card-category">{category}</p>
 
         {/* Stock Status Badge */}
         <div className="product-stock-container">
@@ -59,9 +57,11 @@ const ProductCard = ({ product, isSaved = false, onWishlistChange }) => {
             aria-label={`View details for ${name}`}
           >
             <span>View Details</span>
-            <ArrowRight size={15} />
           </Link>
         </div>
+
+        {/* Lab 05: Add to cart, becomes a quantity stepper once the product is in the cart */}
+        <CardCartControl product={product} />
 
         {/* Lab 04: Wishlist Toggle */}
         <WishlistButton

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight, ShieldCheck, Heart } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Heart } from 'lucide-react';
 import { loginCustomer, getCurrentCustomer } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -101,12 +101,8 @@ const Login = () => {
     <div className="auth-page-wrapper">
       <div className="auth-card">
         <div className="auth-header">
-          <div className="auth-badge">
-            <ShieldCheck size={14} />
-            <span>Secure Authentication</span>
-          </div>
           <h1 className="auth-title">Welcome back</h1>
-          <p className="auth-subtitle">Sign in with your ShopKart account credentials</p>
+          <p className="auth-subtitle">Sign in to your ShopKart account.</p>
         </div>
 
         {/* Success Alert Banner (from Registration) */}
@@ -207,12 +203,11 @@ const Login = () => {
             {isSubmitting ? (
               <>
                 <span className="spinner-sm"></span>
-                <span>Signing In...</span>
+                <span>Signing in...</span>
               </>
             ) : (
               <>
-                <span>Sign In to ShopKart</span>
-                <ArrowRight size={18} />
+                <span>Sign in</span>
               </>
             )}
           </button>

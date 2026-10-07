@@ -2,23 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
   ArrowLeft, 
-  ShoppingCart, 
-  Tag, 
-  ShieldCheck, 
-  Truck, 
-  RotateCcw, 
   CheckCircle2, 
   AlertTriangle, 
   XCircle,
-  AlertCircle,
-  Check
+  AlertCircle
 } from 'lucide-react';
 import { getProductById } from '../services/api';
+import BuyBox from '../components/BuyBox';
 
 /**
  * Task 8: Product Details Page
  * Dynamic route /products/:id
- * Fetches single product details and renders full specifications, stock status, and Add to Cart UI.
+ * Fetches single product details and renders full specifications, stock status, and Add to Cart.
+ * Lab 05: Add to Cart now uses the shared CartContext (real, persisted cart).
  */
 const ProductDetails = () => {
   const { id } = useParams();
@@ -26,7 +22,6 @@ const ProductDetails = () => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [addedToCartToast, setAddedToCartToast] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -66,14 +61,6 @@ const ProductDetails = () => {
       isMounted = false;
     };
   }, [id]);
-
-  // Handle Add to Cart button click (UI-only for Lab 03 as specified)
-  const handleAddToCart = () => {
-    setAddedToCartToast(true);
-    setTimeout(() => {
-      setAddedToCartToast(false);
-    }, 3500);
-  };
 
   // 1. Loading State
   if (loading) {
@@ -143,30 +130,14 @@ const ProductDetails = () => {
             />
           </div>
 
-          {/* Guarantee Badges */}
-          <div className="product-guarantee-badges">
-            <div className="guarantee-badge-item">
-              <Truck size={18} color="var(--primary-400)" />
-              <span>Fast Tracked Delivery</span>
-            </div>
-            <div className="guarantee-badge-item">
-              <RotateCcw size={18} color="var(--primary-400)" />
-              <span>7-Day Return Policy</span>
-            </div>
-            <div className="guarantee-badge-item">
-              <ShieldCheck size={18} color="var(--accent-emerald)" />
-              <span>100% Genuine Quality</span>
-            </div>
-          </div>
         </div>
 
         {/* Right Column: Information, Pricing, & Add to Cart */}
         <div className="product-details-info-card">
-          {/* Category Pill */}
-          <div className="details-category-pill" id="details-category">
-            <Tag size={13} />
-            <span>{category}</span>
-          </div>
+          {/* Category */}
+          <p className="details-category-pill" id="details-category">
+            {category}
+          </p>
 
           {/* Product Name */}
           <h1 className="product-details-title" id="product-details-name">
@@ -213,27 +184,9 @@ const ProductDetails = () => {
             </p>
           </div>
 
-          {/* Add to Cart Action Area */}
+          {/* Lab 05: Buy box (Qty + Add to cart + "Added to cart" panel) */}
           <div className="product-actions-area">
-            <button
-              type="button"
-              className={`btn-add-to-cart ${isOutOfStock ? 'disabled' : ''}`}
-              onClick={handleAddToCart}
-              disabled={isOutOfStock}
-              id="btn-add-to-cart"
-              aria-label="Add product to cart"
-            >
-              <ShoppingCart size={18} />
-              <span>{isOutOfStock ? 'Currently Unavailable' : 'Add to Cart'}</span>
-            </button>
-
-            {/* Added to cart feedback toast / notification */}
-            {addedToCartToast && (
-              <div className="add-to-cart-toast" role="alert" id="add-to-cart-toast">
-                <Check size={16} />
-                <span><strong>{name}</strong> added to cart! (Cart persistence coming in Lab 04)</span>
-              </div>
-            )}
+            <BuyBox product={product} />
           </div>
 
           {/* Product Metadata Info */}

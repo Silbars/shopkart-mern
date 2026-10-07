@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PackageOpen, AlertCircle, RefreshCw, Sparkles, FilterX } from 'lucide-react';
+import { PackageOpen, AlertCircle, RefreshCw, FilterX } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 import SearchBar from '../components/SearchBar';
 import { getProducts, getWishlist } from '../services/api';
@@ -139,15 +139,11 @@ const Products = () => {
     <div className="products-page-container">
       {/* Page Header */}
       <section className="products-hero-section">
-        <div className="products-hero-badge">
-          <Sparkles size={14} />
-          <span>Explore Catalog</span>
-        </div>
         <h1 className="products-hero-title" id="products-heading">
-          Discover ShopKart Products
+          Products
         </h1>
         <p className="products-hero-subtitle">
-          Browse our curated selection of premium electronics, fashion, books, and home essentials.
+          Electronics, fashion, books and home essentials.
         </p>
 
         {/* Search, Category Filter, and Sorting Controls */}

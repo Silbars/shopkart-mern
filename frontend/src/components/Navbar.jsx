@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ShoppingBag, LogOut, User, LogIn, UserPlus, Heart } from 'lucide-react';
+import { ShoppingBag, LogOut, User, LogIn, UserPlus, Heart, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import { getWishlist, WISHLIST_CHANGED_EVENT } from '../services/api';
 
 const Navbar = () => {
   const { user, isAuthenticated, logoutUser } = useAuth();
+  // Lab 05: cart count comes from the shared CartContext (total units), never fetched here
+  const { itemCount: cartCount, status: cartStatus } = useCart();
   const navigate = useNavigate();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -94,6 +97,28 @@ const Navbar = () => {
                     aria-hidden="true"
                   >
                     {wishlistCount}
+                  </span>
+                )}
+              </NavLink>
+
+              {/* Lab 05: Cart link, count = total units from CartContext */}
+              <NavLink
+                to="/cart"
+                className={({ isActive }) => `nav-link nav-link-cart ${isActive ? 'active' : ''}`}
+                id="nav-cart-link"
+                aria-label={
+                  cartStatus === 'ready' ? `Cart, ${cartCount} items` : 'Cart'
+                }
+              >
+                <ShoppingCart size={15} aria-hidden="true" />
+                <span>Cart</span>
+                {cartStatus === 'ready' && (
+                  <span
+                    className={`nav-count-badge nav-count-badge-cart ${cartCount === 0 ? 'is-empty' : ''}`}
+                    id="nav-cart-count"
+                    aria-hidden="true"
+                  >
+                    {cartCount}
                   </span>
                 )}
               </NavLink>
