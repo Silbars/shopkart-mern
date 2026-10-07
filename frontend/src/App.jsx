@@ -5,6 +5,9 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import Home from './pages/Home';
+import Products from './pages/Products';
+import ProductDetails from './pages/ProductDetails';
+import Wishlist from './pages/Wishlist';
 import { useAuth } from './context/AuthContext';
 
 const App = () => {
@@ -60,8 +63,24 @@ const App = () => {
             }
           />
 
+          {/* Lab 03 Task 6: Product Listing Page */}
+          <Route path="/products" element={<Products />} />
+
+          {/* Lab 03 Task 8: Product Details Page */}
+          <Route path="/products/:id" element={<ProductDetails />} />
+
+          {/* Lab 04 Task 8: Wishlist Page (protected — wishlist belongs to the logged-in customer) */}
+          <Route
+            path="/wishlist"
+            element={
+              <ProtectedRoute>
+                <Wishlist />
+              </ProtectedRoute>
+            }
+          />
+
           {/* 404 Catch-All Route */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/products" replace />} />
         </Routes>
       </main>
     </div>

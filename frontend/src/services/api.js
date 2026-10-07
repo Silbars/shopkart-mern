@@ -36,6 +36,10 @@ api.interceptors.response.use(
   }
 );
 
+/* ==========================================================================
+   Customer Authentication APIs (Lab 01 & 02)
+   ========================================================================== */
+
 /**
  * Task 1: Register customer
  * POST /customers/register
@@ -71,6 +75,113 @@ export const getCurrentCustomer = async () => {
  */
 export const logoutCustomer = async () => {
   const response = await api.post('/customers/logout');
+  return response.data;
+};
+
+/* ==========================================================================
+   Product APIs (Lab 03 - Catalog & Discovery)
+   ========================================================================== */
+
+/**
+ * Task 3, 5 & Bonus: Fetch all products with dynamic search, category, and sorting
+ * GET /products?search=...&category=...&sort=...
+ * @param {{ search?: string, category?: string, sort?: string }} params
+ */
+export const getProducts = async (params = {}) => {
+  const cleanParams = {};
+  if (params.search && params.search.trim()) {
+    cleanParams.search = params.search.trim();
+  }
+  if (params.category && params.category !== 'All' && params.category.trim()) {
+    cleanParams.category = params.category.trim();
+  }
+  if (params.sort && params.sort.trim()) {
+    cleanParams.sort = params.sort.trim();
+  }
+
+  const response = await api.get('/products', { params: cleanParams });
+  return response.data;
+};
+
+/**
+ * Task 4: Get single product by ID
+ * GET /products/:id
+ * @param {string} id - MongoDB ObjectId of product
+ */
+export const getProductById = async (id) => {
+  const response = await api.get(`/products/${id}`);
+  return response.data;
+};
+
+/**
+ * Task 2: Create a new product
+ * POST /products
+ * @param {{ name: string, description: string, price: number, category: string, image: string, stock: number }} productData
+ */
+export const createProduct = async (productData) => {
+  const response = await api.post('/products', productData);
+  return response.data;
+};
+
+/* ==========================================================================
+   Wishlist APIs (Lab 04 - Persistent, Protected Wishlist)
+   ========================================================================== */
+
+/**
+ * Browser event fired whenever the backend reports a new wishlist count.
+ * This is NOT global state: it carries the count the server just returned,
+ * so components like the Navbar can show it without a store or Context.
+ */
+export const WISHLIST_CHANGED_EVENT = 'wishlist:changed';
+
+const notifyWishlistChanged = (count) => {
+  if (typeof count === 'number') {
+    window.dispatchEvent(new CustomEvent(WISHLIST_CHANGED_EVENT, { detail: { count } }));
+  }
+};
+
+/**
+ * Task 3: Get the logged-in customer's wishlist (populated products)
+ * GET /wishlist
+ * The server identifies the customer from the JWT cookie — no userId is sent.
+ */
+export const getWishlist = async () => {
+  const response = await api.get('/wishlist');
+  notifyWishlistChanged(response.data.count);
+  return response.data;
+};
+
+/**
+ * Task 2: Add a product to the wishlist
+ * POST /wishlist/:productId
+ * @param {string} productId - MongoDB ObjectId of product
+ */
+export const addToWishlist = async (productId) => {
+  const response = await api.post(`/wishlist/${productId}`);
+  notifyWishlistChanged(response.data.count);
+  return response.data;
+};
+
+/**
+ * Task 4: Remove a product from the wishlist
+ * DELETE /wishlist/:productId
+ * @param {string} productId - MongoDB ObjectId of product
+ */
+export const removeFromWishlist = async (productId) => {
+  const response = await api.delete(`/wishlist/${productId}`);
+  notifyWishlistChanged(response.data.count);
+  return response.data;
+};
+
+/**
+ * Bonus: Toggle a product in the wishlist
+ * PATCH /wishlist/:productId/toggle
+ * @param {string} productId - MongoDB ObjectId of product
+ * @returns {{ success: boolean, saved: boolean, message: string, count: number }}
+ */
+export const toggleWishlist = async (productId) => {
+  const response = await api.patch(`/wishlist/${productId}/toggle`);
+  notifyWishlistChanged(response.data.count);
   return response.data;
 };
 

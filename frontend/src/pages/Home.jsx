@@ -1,50 +1,70 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  ShieldCheck, 
-  ShoppingBag, 
-  Package, 
-  Heart, 
-  CreditCard, 
-  KeyRound,
-  CheckCircle2,
-  Sparkles
-} from 'lucide-react';
-import { getCurrentCustomer } from '../services/api';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { ShoppingBag, ArrowRight, RefreshCw } from 'lucide-react';
+import { getCurrentCustomer, getWishlist } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+
+/**
+ * Lab 02 Task 3: Protected Home Page (personal)
+ *
+ * Built only from real data:
+ * - GET /customers/me  -> greeting, monogram, account details
+ * - GET /wishlist      -> "You have N products saved" + the first saved products
+ */
+
+const SAVED_PREVIEW_LIMIT = 4;
+
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&auto=format&fit=crop&q=80';
+
+const getGreeting = (date = new Date()) => {
+  const hour = date.getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
+// "Asha Rao" -> "AR", "Asha" -> "A"
+const getInitials = (fullName = '') => {
+  const words = fullName.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  const first = words[0][0];
+  const last = words.length > 1 ? words[words.length - 1][0] : '';
+  return `${first}${last}`.toUpperCase();
+};
+
+const formatPrice = (price) =>
+  typeof price === 'number' ? price.toLocaleString('en-IN') : price;
 
 const Home = () => {
   const navigate = useNavigate();
   const { user, loginUser } = useAuth();
-  
-  const [customer, setCustomer] = useState(user || null);
-  const [loading, setLoading] = useState(!user);
-  const [error, setError] = useState('');
 
-  // Fetch logged-in customer data from GET /customers/me
+  // Profile: show what AuthContext already has, refresh quietly from GET /customers/me
+  const [customer, setCustomer] = useState(user || null);
+  const [loadingProfile, setLoadingProfile] = useState(!user);
+
+  // Saved products from GET /wishlist
+  const [saved, setSaved] = useState({ status: 'loading', items: [] });
+
   useEffect(() => {
     let isMounted = true;
 
     const fetchCustomerProfile = async () => {
       try {
-        setLoading(true);
         const data = await getCurrentCustomer();
         if (isMounted) {
           setCustomer(data);
-          loginUser(data); // Sync context
+          loginUser(data); // Keep AuthContext in sync
         }
       } catch (err) {
+        // Session missing or expired -> back to login
         if (isMounted) {
-          setError(err.message || 'Session expired. Please log in again.');
-          // If not logged in -> redirect to /login
           navigate('/login', { replace: true });
         }
       } finally {
         if (isMounted) {
-          setLoading(false);
+          setLoadingProfile(false);
         }
       }
     };
@@ -56,162 +76,183 @@ const Home = () => {
     };
   }, [navigate]);
 
-  if (loading) {
-    return (
-      <div className="loading-screen">
-        <div className="spinner" role="status" aria-label="Loading customer dashboard"></div>
-        <p>Loading your ShopKart account...</p>
-      </div>
-    );
+  const loadSaved = useCallback(async () => {
+    setSaved((prev) => ({ ...prev, status: 'loading' }));
+    try {
+      const data = await getWishlist();
+      setSaved({ status: 'ready', items: data.wishlist || [] });
+    } catch (err) {
+      console.error('Failed to load saved products:', err);
+      setSaved({ status: 'error', items: [] });
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSaved();
+  }, [loadSaved]);
+
+  if (loadingProfile) {
+    return <HomeSkeleton />;
   }
 
-  // First letter of customer name for avatar badge
-  const initial = customer?.fullName ? customer.fullName.charAt(0).toUpperCase() : 'C';
+  const firstName = customer?.fullName?.trim().split(/\s+/)[0];
+  const initials = getInitials(customer?.fullName);
+  const savedCount = saved.items.length;
+  const preview = saved.items.slice(0, SAVED_PREVIEW_LIMIT);
+
+  let activityLine = null;
+  if (saved.status === 'ready') {
+    activityLine =
+      savedCount === 0
+        ? 'Nothing saved yet.'
+        : `You have ${savedCount} ${savedCount === 1 ? 'product' : 'products'} saved.`;
+  }
 
   return (
-    <div className="dashboard-container">
-      {/* Welcome Hero Banner */}
-      <section className="dashboard-hero">
-        <div>
-          <div className="hero-welcome-badge">
-            <Sparkles size={14} />
-            <span>Customer Dashboard</span>
+    <div className="home-page">
+      {/* Greeting */}
+      <header className="home-hero">
+        {initials && (
+          <div className="home-monogram" aria-hidden="true">
+            {initials}
           </div>
-          <h1 className="hero-title" id="welcome-heading">
-            Welcome back, {customer?.fullName || 'Valued Customer'}!
+        )}
+        <div>
+          <h1 className="home-greeting" id="welcome-heading">
+            {getGreeting()}
+            {firstName ? `, ${firstName}.` : '.'}
           </h1>
-          <p className="hero-subtitle">
-            Here is your ShopKart profile overview and verified account details.
-          </p>
+          {saved.status === 'loading' && (
+            <div className="home-skeleton home-skeleton-activity" aria-hidden="true"></div>
+          )}
+          {activityLine && (
+            <p className="home-activity" id="home-activity">
+              {activityLine}
+            </p>
+          )}
+          <Link to="/products" className="home-btn home-btn-primary" id="home-explore-products-btn">
+            <ShoppingBag size={18} aria-hidden="true" />
+            <span>Browse products</span>
+          </Link>
+        </div>
+      </header>
+
+      {/* Saved for later (from GET /wishlist) */}
+      <section className="home-saved" aria-labelledby="home-saved-heading" aria-live="polite">
+        <div className="home-saved-header">
+          <h2 className="home-saved-title" id="home-saved-heading">
+            Saved for later
+          </h2>
+          {saved.status === 'ready' && savedCount > 0 && (
+            <Link to="/wishlist" className="home-see-all" id="home-see-all-saved">
+              <span>See all {savedCount}</span>
+              <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          )}
         </div>
 
-        <div className="api-status-pill" id="security-badge">
-          <span className="status-dot"></span>
-          <span>HttpOnly Auth Session Active</span>
-        </div>
+        {saved.status === 'loading' && (
+          <div className="home-saved-grid" aria-hidden="true">
+            {Array.from({ length: SAVED_PREVIEW_LIMIT }).map((_, i) => (
+              <div key={i}>
+                <div className="home-skeleton home-skeleton-tile"></div>
+                <div className="home-skeleton home-skeleton-line"></div>
+                <div className="home-skeleton home-skeleton-line home-skeleton-line-short"></div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {saved.status === 'error' && (
+          <div className="home-saved-message" role="alert">
+            <p>We couldn't load your saved products.</p>
+            <button type="button" className="home-text-btn" onClick={loadSaved} id="home-saved-retry">
+              <RefreshCw size={15} aria-hidden="true" />
+              <span>Try again</span>
+            </button>
+          </div>
+        )}
+
+        {saved.status === 'ready' && savedCount === 0 && (
+          <div className="home-saved-message" id="home-saved-empty">
+            <p>Tap the heart on any product and it shows up here.</p>
+          </div>
+        )}
+
+        {saved.status === 'ready' && savedCount > 0 && (
+          <ul className="home-saved-grid" id="home-saved-grid">
+            {preview.map((product) => (
+              <li key={product._id}>
+                <Link
+                  to={`/products/${product._id}`}
+                  className="home-saved-item"
+                  aria-label={`${product.name}, ₹${formatPrice(product.price)}`}
+                >
+                  <div className="home-saved-image">
+                    <img
+                      src={product.image}
+                      alt=""
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.src = FALLBACK_IMAGE;
+                      }}
+                    />
+                  </div>
+                  <p className="home-saved-name">{product.name}</p>
+                  <p className="home-saved-price">₹{formatPrice(product.price)}</p>
+                  {product.stock <= 0 && <p className="home-saved-stock is-out">Out of stock</p>}
+                  {product.stock > 0 && product.stock <= 5 && (
+                    <p className="home-saved-stock">Only {product.stock} left</p>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
-      {/* Main Grid: Customer Details & Dashboard Cards */}
-      <div className="dashboard-grid">
-        {/* Profile Card (Required Task 3 Info) */}
-        <div className="card" id="profile-card">
-          <div className="card-title-row">
-            <h2 className="card-title">
-              <User size={20} color="var(--primary-400)" />
-              Profile Details
-            </h2>
-            <span className="api-status-pill">Verified</span>
+      {/* Account details (Lab 02: name, email, phone from GET /customers/me) */}
+      <section className="home-details-strip" aria-labelledby="home-details-heading">
+        <h2 className="home-details-title" id="home-details-heading">
+          Your details
+        </h2>
+        <dl className="home-details-list">
+          <div>
+            <dt>Name</dt>
+            <dd id="display-fullname">{customer?.fullName || 'Not provided'}</dd>
           </div>
-
-          <div className="profile-avatar-large" aria-hidden="true">
-            {initial}
+          <div>
+            <dt>Email</dt>
+            <dd id="display-email">{customer?.email || 'Not provided'}</dd>
           </div>
-
-          <div className="profile-info-list">
-            {/* Customer Full Name */}
-            <div className="profile-info-item">
-              <div className="profile-info-icon">
-                <User size={18} />
-              </div>
-              <div className="profile-info-meta">
-                <p className="profile-info-label">Customer Name</p>
-                <p className="profile-info-value" id="display-fullname">
-                  {customer?.fullName || 'Not provided'}
-                </p>
-              </div>
-            </div>
-
-            {/* Email Address */}
-            <div className="profile-info-item">
-              <div className="profile-info-icon">
-                <Mail size={18} />
-              </div>
-              <div className="profile-info-meta">
-                <p className="profile-info-label">Email Address</p>
-                <p className="profile-info-value" id="display-email">
-                  {customer?.email || 'Not provided'}
-                </p>
-              </div>
-            </div>
-
-            {/* Phone Number */}
-            <div className="profile-info-item">
-              <div className="profile-info-icon">
-                <Phone size={18} />
-              </div>
-              <div className="profile-info-meta">
-                <p className="profile-info-label">Phone Number</p>
-                <p className="profile-info-value" id="display-phone">
-                  {customer?.phone || 'Not provided'}
-                </p>
-              </div>
-            </div>
+          <div>
+            <dt>Phone</dt>
+            <dd id="display-phone" className="home-detail-phone">
+              {customer?.phone || 'Not provided'}
+            </dd>
           </div>
-        </div>
-
-        {/* Right Column: E-commerce Experience & System Info */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
-          {/* Quick Metrics */}
-          <div className="features-grid">
-            <div className="feature-widget">
-              <div className="feature-icon-box" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
-                <ShoppingBag size={22} />
-              </div>
-              <div>
-                <p className="feature-stat-value">Active</p>
-                <p className="feature-stat-label">Cart & Checkout</p>
-              </div>
-            </div>
-
-            <div className="feature-widget">
-              <div className="feature-icon-box" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
-                <Package size={22} />
-              </div>
-              <div>
-                <p className="feature-stat-value">3 Orders</p>
-                <p className="feature-stat-label">Delivered on time</p>
-              </div>
-            </div>
-
-            <div className="feature-widget">
-              <div className="feature-icon-box" style={{ background: 'rgba(244, 63, 94, 0.15)', color: '#fb7185' }}>
-                <Heart size={22} />
-              </div>
-              <div>
-                <p className="feature-stat-value">12 Items</p>
-                <p className="feature-stat-label">In Wishlist</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Session & Security Architecture Card */}
-          <div className="card">
-            <div className="card-title-row">
-              <h2 className="card-title">
-                <ShieldCheck size={20} color="var(--accent-emerald)" />
-                Security & Session Status
-              </h2>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--slate-300)', fontSize: '0.9rem' }}>
-                <CheckCircle2 size={18} color="#10b981" />
-                <span><strong>HttpOnly Cookie:</strong> JWT token is securely stored and protected from JavaScript XSS attacks.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--slate-300)', fontSize: '0.9rem' }}>
-                <CheckCircle2 size={18} color="#10b981" />
-                <span><strong>Protected Endpoint:</strong> Profile data retrieved securely from <code>GET /customers/me</code>.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--slate-300)', fontSize: '0.9rem' }}>
-                <CheckCircle2 size={18} color="#10b981" />
-                <span><strong>Automatic Cookie Transmission:</strong> Axios configured with <code>withCredentials: true</code>.</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+        </dl>
+      </section>
     </div>
   );
 };
+
+// Shown only when there is no profile data yet: same shape as the real page
+const HomeSkeleton = () => (
+  <div className="home-page" role="status" aria-label="Loading your account">
+    <div className="home-hero">
+      <div className="home-skeleton home-monogram"></div>
+      <div>
+        <div className="home-skeleton home-skeleton-heading"></div>
+        <div className="home-skeleton home-skeleton-activity"></div>
+      </div>
+    </div>
+    <div className="home-saved-grid">
+      {Array.from({ length: SAVED_PREVIEW_LIMIT }).map((_, i) => (
+        <div key={i} className="home-skeleton home-skeleton-tile"></div>
+      ))}
+    </div>
+  </div>
+);
 
 export default Home;

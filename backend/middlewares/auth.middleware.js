@@ -21,7 +21,7 @@ const authMiddleware = async (req, res, next) => {
     }
 
     // 2. Verify token
-    const secret = process.env.JWT_SECRET || 'shopkart_super_secret_jwt_key_2026';
+    const secret = process.env.JWT_SECRET;
     let decoded;
     try {
       decoded = jwt.verify(token, secret);

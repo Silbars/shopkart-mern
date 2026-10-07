@@ -25,6 +25,17 @@ const customerSchema = new mongoose.Schema(
       required: [true, 'Phone number is required'],
       trim: true
     },
+    // Lab 04: Wishlist stores Product references (ObjectIds), not product copies.
+    // The Product collection stays the single source of truth for price, stock, etc.
+    wishlist: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Product'
+        }
+      ],
+      default: []
+    },
     createdAt: {
       type: Date,
       default: Date.now

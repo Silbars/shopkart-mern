@@ -61,3 +61,47 @@ This document contains in-depth, interview-ready answers to the TA viva question
 2. **Token Extraction & Verification:** Extracts the JWT from incoming request cookies (`req.cookies.token`), verifies the signature and expiration using `jwt.verify(token, secret)`.
 3. **User Context Injection:** Fetches the active user from MongoDB (verifying they still exist and have not been deleted/banned) and attaches the user model to `req.user`.
 4. **Separation of Concerns:** Keeps controller logic clean and focused solely on business logic rather than repeating token verification in every endpoint. If authentication fails, it terminates the request immediately with a `401 Unauthorized` status.
+
+---
+
+# Part 2 — Lab 03 Product Catalog & Discovery Viva Questions
+
+## 6. Why should product data come from MongoDB instead of being hardcoded in React?
+- **Single Source of Truth**: Dynamic pricing, inventory changes, and new product listings do not require rebuilding or redeploying the React frontend.
+- **Concurrent Stock Integrity**: Prevents race conditions and overselling; when stock drops to 0, all clients immediately see `"Out of stock"`.
+- **Security & Authorization**: Business rules, price validation, and discount calculations must be verified by the backend to prevent malicious client-side price tampering.
+- **Payload & Memory Scalability**: Querying indexed collections avoids loading tens of thousands of items into client browser memory.
+
+---
+
+## 7. What is the difference between a URL parameter and a query parameter?
+- **URL Parameter (`/products/:id`)**:
+  - Embedded directly into the route path.
+  - Used to identify a **specific, singular entity** (e.g. `req.params.id` in Express).
+  - Returns `404 Not Found` if the item does not exist, or `400` if ID format is invalid.
+- **Query Parameter (`/products?category=Electronics&search=phone`)**:
+  - Appended after the `?` delimiter as key-value pairs separated by `&`.
+  - Used for **filtering, searching, sorting, and pagination** across a collection (e.g. `req.query.search`).
+  - Returns `200 OK` with an empty array `[]` if no documents match the filter.
+
+---
+
+## 8. When would you use `/products/:id` vs `/products?category=Electronics`?
+- **`/products/:id`**: When fetching the complete specification of a single item for the **Product Details Page**.
+- **`/products?category=Electronics`**: When filtering the catalog collection to browse items belonging to the Electronics category. Returns `{ success: true, count, products: [...] }`.
+
+---
+
+## 9. Why should search/filtering be handled by the backend instead of filtering only in React?
+- **Database Indexing**: MongoDB utilizes B-Tree and text indexes in RAM (`$regex`, `$text`) to search across millions of documents in sub-milliseconds.
+- **Bandwidth Reduction**: Avoids sending a 50MB JSON database dump to mobile browsers; transmits only matching results (e.g., 2KB).
+- **Pagination Integrity**: Client-side filtering can only filter items currently loaded in React state (e.g., page 1). Backend filtering guarantees search across the entire catalog.
+
+---
+
+## 10. How does dynamic price sorting work in Mongoose?
+- Query parameter `?sort=price_asc` maps to `{ price: 1 }` (ascending).
+- Query parameter `?sort=price_desc` maps to `{ price: -1 }` (descending).
+- Default sort is `{ createdAt: -1 }` (newest first).
+- Using `Product.find(filter).sort(sortOptions)` ensures the database performs the sort leveraging indexes before transmitting results.
+

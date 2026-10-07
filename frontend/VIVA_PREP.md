@@ -79,3 +79,66 @@ Fetching the authenticated customer profile from `GET /customers/me` on startup 
 - [x] **Protected `/home`** guarded by `ProtectedRoute.jsx` and verified against `GET /customers/me`.
 - [x] **Dynamic Auth Sync** using `useAuth()` Context and `GET /customers/me`.
 - [x] **Clean Error Handling & Logout** with `POST /customers/logout` and navigation to `/login`.
+
+---
+
+# 🛒 Lab 03 — Product Catalog & Discovery TA Viva Questions
+
+### Question 6: How does `.map()` help us render products dynamically?
+
+#### Answer:
+1. **Declarative Array-to-JSX Transformation**:
+   In React, `.map()` iterates through the array of product objects retrieved from `GET /products` and returns a corresponding JSX component for each item:
+   ```jsx
+   <div className="products-grid">
+     {products.map((product) => (
+       <ProductCard key={product._id} product={product} />
+     ))}
+   </div>
+   ```
+2. **Reactivity**: When search or category filters change the state (`setProducts`), React automatically invokes `.map()` on the new array to re-render the view without manual DOM manipulation (`innerHTML`, `appendChild`).
+3. **The `key` prop (`key={product._id}`)**:
+   Provides each rendered element with a stable identity. During Virtual DOM reconciliation, React uses this key to determine precisely which elements were inserted, updated, or reordered (e.g. during price sorting), minimizing real browser DOM updates.
+
+---
+
+### Question 7: Why do we need loading, error, and empty states in a frontend application?
+
+#### Answer:
+1. **Loading State (`loading === true`)**:
+   - Asynchronous API calls take time (network latency, DNS lookup, database query).
+   - Showing a spinner with `"Loading products..."` gives immediate feedback that the app is working, preventing the user from seeing a broken or blank screen.
+2. **Error State (`error !== null`)**:
+   - Handles network disconnection, server crashes (500), or bad requests gracefully.
+   - Displays a clear, actionable message with a **"Try Again"** button to allow user recovery.
+3. **Empty State (`!loading && !error && products.length === 0`)**:
+   - Distinguishes between "products are still loading" and "your search returned 0 results".
+   - Shows a friendly illustration and a **"Clear All Filters"** button so the user is never stranded on an empty screen.
+
+---
+
+### Question 8: What happens when the backend returns an empty array?
+
+#### Answer:
+1. **HTTP Status**: The backend responds with `200 OK` (not 404), because the query executed successfully but zero documents matched the search or category filter.
+2. **Frontend UI Reaction**:
+   - Without an explicit condition, rendering `{products.map(...)}` produces 0 cards, leaving a completely blank container that confuses the user.
+   - We check `if (!loading && !error && products.length === 0)` and render an **Empty State** card instructing the user to adjust their search criteria or reset filters.
+
+---
+
+### Question 9: Why should API/service logic be separated from UI components?
+
+#### Answer:
+In ShopKart, all Axios network calls are isolated inside `src/services/api.js` rather than being written directly inside `Products.jsx` or `Home.jsx`:
+
+1. **Separation of Concerns (Single Responsibility Principle)**:
+   - UI components focus strictly on **presentation, layout, and user interactions**.
+   - The service layer focuses on **HTTP configuration, baseURL, interceptors, and error formatting**.
+2. **Reusability (DRY)**:
+   - Methods like `getProducts()` or `getProductById()` can be reused by multiple pages (catalog, recommendations, search suggestions) without duplicating Axios requests.
+3. **Centralized Maintenance**:
+   - If the backend URL or headers change, we update `api.js` in one place instead of modifying dozens of UI files.
+4. **Testability**:
+   - Service functions can be mocked easily during component unit tests without creating real network requests.
+

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight, ShieldCheck, Heart } from 'lucide-react';
 import { loginCustomer, getCurrentCustomer } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -12,6 +12,10 @@ const Login = () => {
   // Pick up pre-filled email or success banner if redirected from Register page
   const initialEmail = location.state?.email || '';
   const successBanner = location.state?.successMessage || '';
+
+  // Lab 04: Guests sent here from a wishlist action see why, and return there after login
+  const infoBanner = location.state?.message || '';
+  const redirectTo = location.state?.from || '/home';
 
   const [formData, setFormData] = useState({
     email: initialEmail,
@@ -83,8 +87,8 @@ const Login = () => {
         loginUser(profile);
       }
 
-      // On success -> Navigate to /home
-      navigate('/home');
+      // On success -> Navigate back to where the user came from (default /home)
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       // Show "Invalid Credentials" or backend message
       setErrorMessage(err.message || 'Invalid credentials');
@@ -110,6 +114,14 @@ const Login = () => {
           <div className="alert-banner alert-success" role="status" id="login-success-banner">
             <CheckCircle2 size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
             <span>{successBanner}</span>
+          </div>
+        )}
+
+        {/* Info Alert Banner (e.g. redirected from a wishlist action) */}
+        {infoBanner && (
+          <div className="alert-banner alert-info" role="status" id="login-info-banner">
+            <Heart size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+            <span>{infoBanner}</span>
           </div>
         )}
 

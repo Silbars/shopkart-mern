@@ -7,8 +7,8 @@ const jwt = require('jsonwebtoken');
  * @returns {string} - Generated JWT token
  */
 const generateToken = (res, customerId) => {
-  const secret = process.env.JWT_SECRET || 'shopkart_super_secret_jwt_key_2026';
-  const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
+  const secret = process.env.JWT_SECRET;
+  const expiresIn = process.env.JWT_EXPIRES_IN;
 
   const token = jwt.sign({ id: customerId }, secret, {
     expiresIn
