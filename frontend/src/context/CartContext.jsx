@@ -140,6 +140,16 @@ export const CartProvider = ({ children }) => {
     [runMutation]
   );
 
+  /**
+   * Lab 06: Called after the server verified a payment and emptied the cart.
+   * Empties the shared copy right away (Navbar shows Cart (0)), then confirms with the server.
+   */
+  const clearCart = useCallback(() => {
+    setCartItems([]);
+    setStatus('ready');
+    refreshCart({ silent: true });
+  }, [refreshCart]);
+
   // Derived values: always calculated from cartItems, so they can never be stale
   const itemCount = useMemo(
     () => cartItems.reduce((total, item) => total + item.quantity, 0),
@@ -170,7 +180,8 @@ export const CartProvider = ({ children }) => {
     addToCart,
     updateQuantity,
     removeFromCart,
-    refreshCart
+    refreshCart,
+    clearCart
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

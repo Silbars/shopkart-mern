@@ -252,3 +252,31 @@ curl -X POST http://localhost:5000/customers/logout \
 3. **XSS Protection (`HttpOnly` Cookies):** Tokens cannot be accessed via client-side JavaScript (`document.cookie`).
 4. **CSRF Protection (`sameSite` Attribute):** Strict/Lax cookie policy.
 5. **Generic Error Messages on Auth Failure:** `401 Invalid credentials` prevents account enumeration attacks.
+
+---
+
+## 💳 Razorpay test mode setup (Lab 06)
+
+Checkout works without keys (it shows "Online payment isn't set up yet"). To try the real Razorpay window:
+
+1. Log in at <https://dashboard.razorpay.com> and switch to **Test Mode** (toggle in the top bar).
+2. Go to **Account & Settings → API Keys → Generate Test Key**.
+3. Add both values to `backend/.env` (this file is git-ignored; never commit it):
+   ```env
+   RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxxx
+   RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxxxxxx
+   ```
+4. Restart the backend (`npm run dev`).
+5. Pay with a Razorpay **test card** from <https://razorpay.com/docs/payments/payments/test-card-details/> (any future expiry, any CVV). Test Mode never charges real money.
+
+The **Key Secret stays on the server**: React only ever receives the Key ID from `POST /orders/create-payment-order`.
+
+### Order API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/orders/create-payment-order` | Validate address, cart, stock; server-side total; create pending order + Razorpay order |
+| POST | `/orders/verify-payment` | Verify `razorpay_signature` (HMAC SHA256), mark PAID / PLACED, reduce stock, clear cart |
+| GET | `/orders` | Current customer's placed orders, newest first |
+| GET | `/orders/:id` | One order (404 if it is not yours) |
+| PATCH | `/orders/:id/status` | Bonus, development only: PLACED → CONFIRMED → SHIPPED → DELIVERED |

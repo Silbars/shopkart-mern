@@ -25,7 +25,8 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^7.6.0",
-    "mongoose": "^8.4.0"
+    "mongoose": "^8.4.0",
+    "razorpay": "^2.9.8"
   },
   "devDependencies": {
     "jest": "^29.7.0",

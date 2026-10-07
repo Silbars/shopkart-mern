@@ -34,6 +34,17 @@ export default defineConfig({
           }
         }
       },
+      // Lab 06: /orders is both a React page (/orders, /orders/:id) and an API path
+      '/orders': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+        secure: false,
+        bypass: (req) => {
+          if (req.headers.accept && req.headers.accept.includes('text/html')) {
+            return '/index.html';
+          }
+        }
+      },
       // Lab 05: /cart is both a React page and an API path (same rule as /wishlist)
       '/cart': {
         target: 'http://localhost:5001',

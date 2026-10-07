@@ -232,4 +232,47 @@ export const removeFromCart = async (productId) => {
   return response.data;
 };
 
+/* ==========================================================================
+   Order APIs (Lab 06 - Checkout, Razorpay payment verification, order history)
+   ========================================================================== */
+
+/**
+ * Validate the cart on the server and start a Razorpay payment.
+ * POST /orders/create-payment-order   body: { shippingAddress }
+ * Only the address is sent: items, prices and the total are read from MongoDB.
+ * @returns {{ shopKartOrderId, razorpayOrderId, amount, currency, key }}
+ */
+export const createPaymentOrder = async (shippingAddress) => {
+  const response = await api.post('/orders/create-payment-order', { shippingAddress });
+  return response.data;
+};
+
+/**
+ * Send Razorpay's checkout response to the server for signature verification.
+ * POST /orders/verify-payment
+ * @param {{ shopKartOrderId, razorpay_order_id, razorpay_payment_id, razorpay_signature }} payload
+ */
+export const verifyPayment = async (payload) => {
+  const response = await api.post('/orders/verify-payment', payload);
+  return response.data;
+};
+
+/** GET /orders: the logged-in customer's placed orders, newest first */
+export const getOrders = async () => {
+  const response = await api.get('/orders');
+  return response.data;
+};
+
+/** GET /orders/:id: one order (only if it belongs to the logged-in customer) */
+export const getOrderById = async (id) => {
+  const response = await api.get(`/orders/${id}`);
+  return response.data;
+};
+
+/** Bonus (development only): PATCH /orders/:id/status moves the order one step forward */
+export const advanceOrderStatus = async (id) => {
+  const response = await api.patch(`/orders/${id}/status`);
+  return response.data;
+};
+
 export default api;

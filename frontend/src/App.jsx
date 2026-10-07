@@ -10,6 +10,9 @@ import ProductDetails from './pages/ProductDetails';
 import Wishlist from './pages/Wishlist';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
+import Orders from './pages/Orders';
+import OrderDetails from './pages/OrderDetails';
+import OrderSuccess from './pages/OrderSuccess';
 import { useAuth } from './context/AuthContext';
 
 const App = () => {
@@ -91,12 +94,38 @@ const App = () => {
             }
           />
 
-          {/* Lab 05: Checkout placeholder (real checkout is Lab 06) */}
+          {/* Lab 06: Checkout (shipping form + Razorpay test payment) */}
           <Route
             path="/checkout"
             element={
               <ProtectedRoute>
                 <Checkout />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Lab 06: Order confirmation, My Orders, order details (all protected) */}
+          <Route
+            path="/order-success/:id"
+            element={
+              <ProtectedRoute>
+                <OrderSuccess />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute>
+                <Orders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders/:id"
+            element={
+              <ProtectedRoute>
+                <OrderDetails />
               </ProtectedRoute>
             }
           />

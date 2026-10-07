@@ -1038,3 +1038,193 @@ So the frontend can replace its state with exactly what MongoDB has, including t
 - **Product card:** `Add to cart` → after the first add it becomes a stepper `[🗑 1 +]`. At 1 the left button removes the item (back to `Add to cart`); above 1 it is `−`. `+` sends `POST /cart/:id` (+1); `−` sends `PATCH` with `quantity − 1`; the trash sends `DELETE`. Same CartContext, so the Navbar and Cart page update together.
 - **Product Details:** `Qty: [n]` + `Add to cart` sends **one** `POST /cart/:id` with `{ "quantity": n }`. The backend adds `n` atomically only if the new total stays within stock (`$elemMatch` with `quantity <= stock − n`, then `$inc` by `n`). Then an **"Added to cart" side panel** shows the item, the derived cart subtotal, and *Proceed to checkout* / *Go to Cart*.
 - The optional `quantity` defaults to 1, so the original Lab 05 contract ("add again = +1") is unchanged. *(Tests: `POST /cart/:productId with an optional quantity`, 9 cases incl. concurrency.)*
+
+---
+---
+
+# 💳 ShopKart — Fullstack Engineering Lab 06: TA Viva Preparation Guide
+## Checkout, Razorpay Test Payment & Orders
+
+Answers to all 21 TA Viva Questions for **Engineering Lab 06**, based on the actual ShopKart code.
+
+---
+
+## 🗺️ The Whole Flow in 30 Seconds
+
+```text
+Checkout.jsx  ── validate form (no request if invalid)
+   │  POST /orders/create-payment-order  { shippingAddress }   ← nothing else is trusted
+   ▼
+order.controller.createPaymentOrder
+   1. validate address            → 400 + field errors
+   2. load cart from MongoDB      → 400 "Your cart is empty."
+   3. reload every Product        → 400 "...no longer available"
+   4. stock check                 → 400 "Insufficient stock for X."
+   5. snapshot items + total ON THE SERVER
+   6. Order { status: PENDING_PAYMENT, paymentStatus: PENDING }   (or reuse a matching one)
+   7. razorpay.orders.create({ amount: total × 100, currency: 'INR', receipt: orderId })
+   8. return { shopKartOrderId, razorpayOrderId, amount, currency, key }   ← key ID only
+   ▼
+Razorpay Checkout (browser) ── handler(response) → POST /orders/verify-payment
+   ▼
+order.controller.verifyPayment
+   1. order must belong to req.user           → 404 otherwise
+   2. razorpay_order_id must equal the STORED one
+   3. HMAC_SHA256(stored_order_id + "|" + payment_id, KEY_SECRET) == signature?  → 400 if not
+   4. PENDING_PAYMENT → PAID / PLACED   (conditional update: runs once)
+   5. stock −qty  (only if stock >= qty, so it never goes negative)
+   6. cart = []
+   ▼
+clearCart() in CartContext → Navbar "Cart (0)" → /order-success/:id → My Orders
+```
+
+| Method | Endpoint | Success | Failures |
+|---|---|:---:|---|
+| POST | `/orders/create-payment-order` (also `/orders`) | 201 new / 200 reused | 400 address / empty cart / deleted product / stock, 401, 502 Razorpay down, 503 keys missing |
+| POST | `/orders/verify-payment` | 200 | 400 missing fields / wrong order id / **invalid signature**, 401, 404 not your order |
+| GET | `/orders` | 200 (PLACED and later, newest first) | 401 |
+| GET | `/orders/:id` | 200 | 400 bad id, 401, **404 not found or not yours** |
+| PATCH | `/orders/:id/status` *(bonus, dev only)* | 200 | 400 not paid / already delivered, 403 in production |
+
+---
+
+## Payments
+
+### 1. Why must the Razorpay Order be created from the backend?
+Because creating it needs the **Key Secret**, and because the **amount** must come from the server. The backend reloads the cart and products, calculates the total, and creates the Razorpay order for exactly that amount (`toPaise(totalAmount)` in `order.controller.js`). If React created it, a user could open DevTools and create an order for ₹1. The Razorpay order also ties the payment to **our** order (`receipt: order._id`), which signature verification relies on.
+
+### 2. Why is the Razorpay Key Secret never sent to React?
+Anything sent to the browser is public: anyone can read it in DevTools. With the secret, an attacker could **forge valid payment signatures** ("I paid" without paying) and call Razorpay's API as ShopKart. So:
+- `RAZORPAY_KEY_SECRET` lives only in `backend/.env` (git-ignored) and is read only in `config/razorpay.js` and `verifyPayment`.
+- The API returns only `key: process.env.RAZORPAY_KEY_ID`.
+- 🧪 Test: `should never send the Razorpay key secret to the client`.
+
+### 3. Why does Razorpay expect INR amounts in paise?
+Paise are the **smallest unit**, so every amount is a whole number. Integers avoid floating-point errors (`0.1 + 0.2 = 0.30000000000000004`). ₹7,497 → `749700`. We use `Math.round(rupees * 100)` so a value like `2999.99 * 100 = 299998.99999...` becomes exactly `299999`.
+
+### 4. What are `razorpay_order_id`, `razorpay_payment_id` and `razorpay_signature`?
+| Field | Meaning |
+|---|---|
+| `razorpay_order_id` | The Razorpay order **our backend created** (`order_...`). We store it on the ShopKart order. |
+| `razorpay_payment_id` | The actual payment attempt that succeeded (`pay_...`). Stored as proof after verification. |
+| `razorpay_signature` | `HMAC_SHA256(order_id + "|" + payment_id, key_secret)` made by Razorpay. Only someone with the secret can produce it. |
+
+### 5. Why is signature verification mandatory?
+The `handler` callback runs **in the browser**, and the browser can be faked. Anyone could call `/orders/verify-payment` with made-up ids. The signature proves Razorpay itself confirmed **this payment for this order**: we recompute the HMAC with our secret and compare.
+```js
+const expected = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+  .update(`${order.razorpayOrderId}|${razorpayPaymentId}`)   // the STORED order id
+  .digest('hex');
+// constant-time compare (crypto.timingSafeEqual) so timing can't leak the right answer
+```
+🧪 Tests: fake signature, signature from another secret, and a correctly signed payment for a **different** Razorpay order are all rejected; the order stays unpaid and the cart stays.
+
+### 6. Why should the cart not be cleared when Checkout merely opens?
+Opening Checkout means nothing has been paid yet. The customer can close the popup, the card can be declined, the network can drop. If we cleared the cart early, a failed payment would **lose the customer's cart**. ShopKart clears it in exactly one place: after the signature is verified (`Customer.updateOne(..., { cart: [] })` in `verifyPayment`). 🧪 Test: `should keep the cart unchanged after the Razorpay order is created`; browser check: cancelled, failed and tampered payments all kept "Cart (3)".
+
+### 7. What would happen if the client simply sent `paymentSuccess: true`?
+Anyone could get free products by sending one boolean from DevTools or Postman. ShopKart ignores it: `verifyPayment` only accepts the three Razorpay fields and a valid signature. 🧪 Test: `should ignore a client-side "paymentSuccess: true"` → 400, order stays `PENDING`.
+
+---
+
+## Orders
+
+### 8. Why does an Order store product name and price separately from the Product document?
+An order is a **record of what happened**: the customer paid ₹2,999 for "Mechanical Keyboard" on 7 Oct. If the order only stored a Product reference, it would show whatever the product says **today** (or nothing, if it was deleted).
+```js
+items.push({ product: product._id, name: product.name, price: product.price,
+             quantity: row.quantity, image: product.image });   // snapshot at purchase time
+```
+The `product` reference is still kept so you can link to the product page.
+
+### 9. Why should order price not change when product price changes?
+The customer paid a specific amount; invoices, refunds and accounting depend on it. 🧪 Test + browser check: after the keyboard's price changed to ₹3,499 and its name to "Keyboard v2", the order still showed "Mechanical Keyboard RGB, 2 × ₹2,999".
+
+### 10. What is the difference between Cart data and Order data?
+| | Cart (Lab 05) | Order (Lab 06) |
+|---|---|---|
+| Lifetime | Temporary, changes all the time | Permanent history |
+| Product data | **Live reference** (populate shows today's price) | **Snapshot** (name, price, image copied) |
+| Total | Derived in React | Calculated **once** on the server and stored |
+| Stored where | Inside the Customer document | Its own `orders` collection |
+
+### 11. Why should an Order reference the User?
+To know **whose** order it is: `GET /orders` filters by `user: req.user._id`, and `GET /orders/:id` checks ownership. Without it, one customer's history couldn't be separated from another's. (ShopKart's user model is `Customer`, so `ref: 'Customer'`.)
+
+---
+
+## Security & Business Logic
+
+### 12. Why should the backend calculate totalAmount?
+The frontend is fully under the user's control. The server owns pricing:
+```js
+const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);   // latest prices
+```
+🧪 Test: sending `totalAmount: 1` and fake `items` is ignored; Razorpay still gets `749700`.
+
+### 13. Why must stock be checked again during checkout?
+The cart can be hours or days old. Other customers may have bought the stock since. 🧪 Test + browser check: stock lowered to 1 while 2 are in the cart → `400 "Insufficient stock for Mechanical Keyboard RGB."`, no order created, cart unchanged. After payment, stock is also **reduced** with a conditional update (`stock: { $gte: qty }`), so it can never go negative. If the last unit sold during payment, the order is still PAID but flagged `stockIssue` (a real shop would refund).
+
+### 14. Why should the frontend not send the final order items as trusted data?
+Same reason as the total: the user could change quantities, prices or product ids. ShopKart's frontend sends **only the shipping address**; the server reads the cart from MongoDB and builds the items itself.
+
+### 15. How do you prevent a user from reading someone else's order?
+Every query includes the owner:
+```js
+Order.findOne({ _id: id, user: req.user._id })   // not just findById(id)
+```
+If it doesn't match, we return **404 "Order not found"**, the same as for an id that doesn't exist, so guessing ids can't even confirm an order exists. 🧪 Tests + browser check: another customer opening the order URL sees "Order not found"; verifying someone else's payment also returns 404.
+
+---
+
+## State Management
+
+### 16. Why must global cart state be cleared after order creation?
+The server emptied the cart, but React still holds its old copy in `CartContext`. If we didn't clear it, the Navbar would keep showing "Cart (3)" and the cart page would show items that are gone. After verification: `clearCart()` empties the shared state (Navbar → "Cart (0)" immediately) and then silently re-fetches to confirm with the server.
+
+### 17. What happens if the backend order succeeds but frontend state is not updated?
+The UI lies: "Cart (3)" for an empty cart, items that "Proceed to Checkout" would reject as an empty cart. The user might think the order failed and pay again. That's why every successful mutation must update all affected UI, and why ShopKart's state always comes from server responses.
+
+### 18. Why should cart remain untouched if order creation fails?
+The customer still wants those items. A failure (stock, network, payment declined, Razorpay down) must let them fix the problem and retry. ShopKart only touches the cart after a verified payment; every failure path (400, 502, 503, invalid signature) leaves it as is. 🧪 Tests cover each one.
+
+---
+
+## React
+
+### 19. Where should checkout form state live?
+In the **Checkout page** (`useState` in `Checkout.jsx`), passed down to `CheckoutForm`. Only this page uses it, so it doesn't belong in global state. The cart, which many components share, stays in `CartContext`. The form is prefilled from `AuthContext` (name, phone).
+
+### 20. What loading states should exist while placing an order?
+ShopKart's **Place Order** button shows each step and is disabled throughout (no double orders):
+| Phase | Button label |
+|---|---|
+| Creating the order on the server | "Preparing payment..." |
+| Razorpay popup open | "Waiting for payment..." |
+| Server verifying the signature | "Confirming payment..." |
+
+The form inputs are disabled while busy. The success page, My Orders and order details have their own loading skeletons.
+
+### 21. What should happen if the cart is empty and a user directly opens `/checkout`?
+Show a clear empty state ("There's nothing to check out" + **Browse Products**) instead of a broken form. The backend also rejects an empty cart with 400, in case someone calls the API directly.
+
+---
+
+## 🎯 Tricky Follow-Ups
+
+**Q: What if the customer clicks Place Order twice, or retries after closing the popup?**
+The button is disabled while busy. On retry with the same cart, the server **reuses the pending order and its Razorpay order** instead of creating duplicates (🧪 `should reuse the pending order...`). If the cart changed, a new order is created.
+
+**Q: What if `/orders/verify-payment` is called twice for the same payment?**
+The update only runs `WHERE status = 'PENDING_PAYMENT'`, so the second call finds it already PAID and just returns it. Stock is reduced once. (🧪 `should be safe to verify twice`.)
+
+**Q: Why does My Orders hide PENDING_PAYMENT orders?**
+They're abandoned payment attempts, not purchases. They stay in MongoDB, but history shows only PLACED and later.
+
+**Q: What does `stockIssue` mean?**
+Two customers paid for the last unit at the same moment. The second payment is valid but stock can't go below 0, so the order is flagged for the shop to resolve. Avoiding this completely needs stock reservations or a transaction; out of scope for this lab.
+
+**Q: How did you test payments without real money or even real keys?**
+Razorpay **Test Mode** never moves money. In the Jest tests, Razorpay's `orders.create` is replaced by a fake, and signatures are produced with the same HMAC formula using a test secret. That's enough to test valid, fake and mismatched signatures against the real verification code. `npm test` → **146/146**.
+
+**Q: How do you set up the real keys?** See `backend/README.md` → "Razorpay test mode setup".

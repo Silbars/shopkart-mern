@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ShoppingBag, LogOut, User, LogIn, UserPlus, Heart, ShoppingCart } from 'lucide-react';
+import { ShoppingBag, LogOut, User, LogIn, UserPlus, Heart, ShoppingCart, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { getWishlist, WISHLIST_CHANGED_EVENT } from '../services/api';
@@ -121,6 +121,16 @@ const Navbar = () => {
                     {cartCount}
                   </span>
                 )}
+              </NavLink>
+
+              {/* Lab 06: Order history */}
+              <NavLink
+                to="/orders"
+                className={({ isActive }) => `nav-link nav-link-orders ${isActive ? 'active' : ''}`}
+                id="nav-orders-link"
+              >
+                <Package size={15} aria-hidden="true" />
+                <span>Orders</span>
               </NavLink>
 
               {/* User Identity Pill */}
