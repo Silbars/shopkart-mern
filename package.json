@@ -1,14 +1,15 @@
 {
   "name": "shopkart-lab-projects",
   "version": "1.0.0",
-  "description": "ShopKart Lab Projects Root",
+  "description": "ShopKart - MERN e-commerce app with Razorpay test-mode checkout",
   "scripts": {
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "seed": "npm --prefix backend run seed",
     "start": "npm --prefix backend start",
     "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
-    "build:frontend": "npm --prefix frontend run build",
-    "test": "npm --prefix backend test"
+    "build:frontend": "npm --prefix frontend run build"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

@@ -11,7 +11,7 @@ const cartRoutes = require('./routes/cart.routes');
 const orderRoutes = require('./routes/order.routes');
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5001;
 const MONGO_URI = process.env.MONGO_URI;
 
 // Core Middlewares
